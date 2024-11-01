@@ -1,1 +1,301 @@
+# This Python code works with the Arduino C++ variant to control a linear actuator using a potentiometer
+# The data from the potentiometer is stored on the text file and allows the user to see changes to the actuator motion
+# This project is made with expansion in mind, to later use the stored data to help determine the actuator position
+# Chose to work with pyserial library over pyFirmata libray to control and work with the Arduino
+# Functions around the program based on when they were added, connect together in several ways
+# The program has two sets of input, both from the user, the text-based inputs in the code,
+# and the device input from the user-turned potentiometer
+# Two collection types, the list for local storage in each instance of the program
+# and the data.txt file for long-term storage
+# The program is made up of many procedures that work together to prevent errors and allow smooth functioning
+# The list is sequenced and produces each data point in the order it was collected and labels what number point it was
+# The procedures are called at the end with the beginning procedures and the rest are called from the previous
+# There are 4 outputs in the code, the printed list and graphed data at the end, the stored list holding data
+# that can be used, and the movement of the linear actuator.
+# Code to use pyserial based on examples from:
+# https://github.com/xanthium-enterprises/CrossPlatform-Serial-Port-Programming-using-Python-and-PySerial
+# Lines referencing the code will refer to xanthium-enterprises if based on or from the examples
+# Code for opening and adding a text file based on reference from:
+# https://www.w3schools.com/python/python_file_write.asp
+# Lines referencing the code will refer to w3schools if based on or from the examples
 
+import matplotlib.pyplot as plt
+import serial  # Imports pyserial to be used to read and write to arduino
+import time  # Imports time to allow pauses, for loops and to allow time for connection
+global save_data  # This, and next 7 lines are to define variables on a local level within their functions
+global go
+global SerialMonitor
+global get_data
+global condensed_data
+global data_line
+global is_extension
+potentiometer_values = []  # Creates list to store potentiometer values from Arduino
+port = "COMX"  # Replace "X" in "COMX" with whatever port number your Arduino is connected to
+port_found = True
+
+
+
+
+def open_save_file():  # Procedure attempts to create a text file, if already there adds start indicator
+   global save_data
+   try:
+       open('data.txt', 'x')  # This line and the next few are based off of w3schools sample code for text files
+
+
+   except FileExistsError:
+       save_data = open('data.txt', 'a')
+       save_data.write("\nProgram Start")
+       save_data.close()
+
+
+
+
+def start_program():  # Function starts the program, uses user input to either start or cancel program
+   global go
+   start = input("Start Data Collection (y/n): ")
+   if start == "y":
+       print("Starting connection...")
+       go = True
+       open_port()
+   elif start == "n":
+       print("Closing")
+       go = False
+   else:
+       print("Not a Valid Input")
+       start_program()
+
+
+
+
+def open_port():  # Function attempts to open a port on Arduino
+   global SerialMonitor
+   global port_found
+   global port
+   try:  # Try and execpt loops try opening port 'COMX' and if it fails to find connection, trys 'COMX+1', make X your connected port
+       SerialMonitor = serial.Serial('COMX')  # Based on code from xanthium-enterprises on opening a pyserial port
+
+
+   except serial.serialutil.SerialException:
+       port = "COMX+1"
+       try:
+           SerialMonitor = serial.Serial('COMX')  # Based on code from xanthium-enterprises on opening a pyserial port
+
+
+       except serial.serialutil.SerialException:
+           port_found = False
+
+
+
+
+def port_setup():  # This function sets up the Arduino for communication, based on examples from xanthium-enterprises
+   global get_data
+   SerialMonitor.baudrate = 9600  # This and next 5 lines to set up Arduino are directly from xanthium-enterprises
+   SerialMonitor.parity = 'N'  # Uses different variable name but same setup code
+   SerialMonitor.bytesize = 8
+   SerialMonitor.stopbits = 1
+   SerialMonitor.timeout = 3
+   print("Testing connection")
+   time.sleep(2)  # This pause is necessary to give time for the Arduino to fully connect
+   get_data = True
+   test_connection()
+
+
+
+
+def test_connection():  # This function tests the connection to the Arduino to ensure the correct code is installed
+   x = 0
+   SerialMonitor.write(b'S')  # Sending data to the serial monitor based on xanthium-enterprises
+   time.sleep(.2)
+   test = str(SerialMonitor.readline())  # Reads response to tell if message was received and correct code installed
+   remove_extra(test)  # Test data is received based on xanthium-enterprises, the remove_extra function removes excess
+   try:  # Makes sure condensed data is defined
+       condensed_data
+   except NameError:
+       print("Connection Bad\nCheck Code Installed on Arduino")
+       x += 1
+   if x == 0:  # If condensed data is received, holding the message from arduino, the connection is good
+       if condensed_data == "Good":
+           print("Connection is Good\nStarting Data Collection")
+           run_data()
+       else:
+           print("Connection Bad\nCheck Code Installed on Arduino")
+
+
+
+
+def start_gather():  # Function lets user know whether connection has been successful, and what port
+
+
+   if not port_found:
+       print("Port not found, Unable to begin program, try reconnecting Arduino")
+
+
+   else:
+       if port == 'COM3':
+           print("Connected to COM4")
+           port_setup()
+       else:
+           print("Connected to COM3")
+           port_setup()
+
+
+
+
+def remove_extra(data_line_fix):  # Function takes message from arduino and trims the excess data received
+   global condensed_data
+   if len(data_line_fix) == 10:
+       condensed_data = data_line_fix[2:5]
+   elif len(data_line_fix) == 11:
+       condensed_data = data_line_fix[2:6]
+   elif len(data_line_fix) == 9:
+       condensed_data = data_line_fix[2:4]
+   elif len(data_line_fix) == 8:
+       condensed_data = data_line_fix[2:3]
+
+
+
+
+def data_grab():  # Function grabs the data, sends message to Arduino, which prints a line of data, which is then read
+   global data_line
+   if get_data:
+       SerialMonitor.write(b'G')  # This and next line based on code from xanthium-enterprises
+       data_line = str(SerialMonitor.readline())
+       remove_extra(data_line)
+
+
+
+
+def run_data():  # Runs the function to open file, and to ask what collection type
+   open_save_file()
+   collection_type()
+
+
+
+
+def collection_type():  # Asks user what method of collection should be used, automatic or manual
+   type_ask = input("What Collection Process, Manual(m) or Automatic(a)\nEnter choice: ")
+   if type_ask == "a":
+       auto_collect()
+   elif type_ask == "m":
+       manual_collect()
+   else:
+       print("Not A Valid Input")
+       collection_type()
+
+
+
+
+def auto_collect():  # Function to automatically collect data, based on info from user
+   loops_in = input("How many data points should be collected\nEnter as Integer: ")
+   time_collect_in = input("How often should data points be collected (in seconds)\nEnter as as XX.XX: ")
+   try:  # Try loops test the inputs to keep from errors
+       test_loop = int(loops_in)
+   except ValueError:
+       print("Not a Valid Integer for Loops")
+       auto_collect()
+   try:
+       test_time_collect = float(time_collect_in)
+   except ValueError:
+       print("Not a Valid Integer for Time")
+       auto_collect()
+   loop = int(loops_in)  # User chooses number of times the loop goes, and how long each loop is
+   time_collect = float(time_collect_in)
+
+
+   for num in range(loop):  # During loop the data is grabbed, and added to the list of values
+       data_grab()
+       potentiometer_values.append({'data': condensed_data})
+       print(condensed_data)
+       time.sleep(time_collect)
+   end_again()
+
+
+def add_to_data():  # Function adds the datapoints to the text file to be stored, and prints/graphs them for user to see
+   datapoint_num = 1
+   data_points = []  # Stores the datapoints to be graphed
+
+
+   for point in potentiometer_values:
+       is_moving(point['data'])
+       with open('data.txt', 'a') as add_data:   # Adding the data based off code from w3schools, next 2 lines
+           add_data.write(f'\nDatapoint {datapoint_num}: {point['data']}, Actuator is {is_extension}')
+       print(f"Datapoint {datapoint_num}: {point['data']}, Actuator is {is_extension}")   # f strings taught in class
+
+       data_points.append(float(point['data']))  # Stores the datapoints for plotting
+       datapoint_num += 1
+
+# Data plotting function based on google search of how to use the matplot library
+   plt.figure(figsize=(10, 5))
+   plt.plot(data_points, label="Potentiometer Data")
+   plt.title("Potentiometer Values Over Time")
+   plt.xlabel("Datapoint Number")
+   plt.ylabel("Potentiometer Values")
+   plt.legend()
+   plt.show()
+
+
+
+
+def is_moving(num):  # Lets user know the movement of the linear actuator controlled by the code
+   global is_extension
+   make_int = int(num)
+   if make_int > 30:
+       is_extension = "Extending"
+       return is_extension
+
+
+   elif make_int < 10:
+       is_extension = "Retracting"
+       return is_extension
+
+
+   #else:                         #Used if potentiometer is data logger, emg to sensitive to have actuator try and stop
+   #    is_extension = "Stopped"
+   #    return is_extension
+
+
+
+
+def end_again():  # Asks user if they wish to end the program, if yes restarts collection function, if no, adds the data
+   again = input("Collect more Data (y/n): ")
+   if again == "y":
+       collection_type()
+   elif again == "n":
+       add_to_data()
+       add_data = open('data.txt', 'a')  # 3 lines based on w3schools code
+       add_data.write(f'\nProgram End')
+       add_data.close()
+   else:
+       end_again()
+
+
+
+
+def manual_collect():  # Allows manual collection of data, the while loop allowing as many points as the user chooses
+   print("Type 'go' to collect data point, type 'break' to exit")
+   while True:
+       grab = input("Enter transmit message: ")
+       if grab == "go":
+           data_grab()
+           potentiometer_values.append({'data': condensed_data})
+           print(condensed_data)
+
+
+       elif grab == "break":
+           break
+   end_again()
+
+
+
+
+def begin():  # Function runs start code, and prevents breaking, failing at a point if connection not correct
+   start_program()
+   if go:
+       start_gather()
+   else:
+       pass
+
+
+
+
+begin()
