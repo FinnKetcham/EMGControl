@@ -21,8 +21,8 @@ float wiper_value = 0.0; //voltage i think
 int receivedValue2 = 0; // makes it so speed control stil works with state change
 //mapping function, used some Chatgpt-4 to learn how to do this
 int scaleEMG(int receivedValue) {  
-  const int inputMin = 6, inputMax = 50, outputMin = 0, outputMax = 127;
-  if (receivedValue > 224) {
+  const int inputMin = 6, inputMax = 50, outputMin = 0, outputMax = 127;  // The point of this is so that the values of the emg sensor can be set at minimum and maximums
+  if (receivedValue > 224) {  //Necessary as usually unless an ununatural spike muscle flextion doesnt put the recived value above 50, so needs to be rescaled to have effect
     return outputMax;
   }
   return outputMin + (constrain(receivedValue, inputMin, inputMax) - inputMin) * (outputMax - outputMin) / (inputMax - inputMin);
