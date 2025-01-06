@@ -1,1 +1,144 @@
+#include <AltSoftSerial.h>
+#include <Adafruit_DS3502.h>
+
+
+
+
+AltSoftSerial EMGSERIAL;  //allows bluetooth communication
+Adafruit_DS3502 ds3502 = Adafruit_DS3502();
+
+
+
+
+#define WIPER_VALUE_PIN A0 // from the test of code for the DS3502
+
+
+
+
+int receivedValue = 0; //direct value from transmitter
+int scaledValue = 0; // the scaled value
+float wiper_value = 0.0; //voltage i think
+int receivedValue2 = 0; // makes it so speed control stil works with state change
+//mapping function, used some Chatgpt-4 to learn how to do this
+int scaleEMG(int receivedValue) {  
+  const int inputMin = 6, inputMax = 50, outputMin = 0, outputMax = 127;
+  if (receivedValue > 224) {
+    return outputMax;
+  }
+  return outputMin + (constrain(receivedValue, inputMin, inputMax) - inputMin) * (outputMax - outputMin) / (inputMax - inputMin);
+}
+
+
+void setup() {
+ 
+  pinMode(11, OUTPUT); //sets up pins controling the relays
+  pinMode(10, OUTPUT);
+  digitalWrite(10, LOW); //ses initial state of the relays
+  digitalWrite(11, LOW);
+  Serial.begin(9600);      //starts normal serial monitor, allowing communitcation with python collection program
+  EMGSERIAL.begin(9600);   //similar but for bluetooth stuff
+
+
+}
+
+
+void loop() {
+  receive();  //loop for python collection
+ 
+  if (EMGSERIAL.available()) {  //looks for data from transmitter
+    receivedValue = EMGSERIAL.read(); //collects either first speed value, or switch state
+    Serial.println(receivedValue);
+    delay(10);
+    receivedValue2 = EMGSERIAL.read(); //collects emg value if first is the switch state
+    scaledValue = scaleEMG(receivedValue2); //scales and sets digital potentiometer to the read data
+    ds3502.setWiper(scaledValue);
+    receive();
+
+
+    if (receivedValue == 254) {
+      digitalWrite(10, HIGH);
+      digitalWrite(11, LOW);
+      //delay(10);
+      //receivedValue2 = EMGSERIAL.read();
+      //scaledValue = scaleEMG(receivedValue2);
+      //ds3502.setWiper(scaledValue);
+      //Serial.println(scaledValue);
+      delay(10);
+    } else if (receivedValue == 255) {
+      digitalWrite(10, LOW);
+      digitalWrite(11, HIGH);
+      //delay(10);
+      //receivedValue2 = EMGSERIAL.read();
+      //scaledValue = scaleEMG(receivedValue2);
+      //ds3502.setWiper(scaledValue);
+      //Serial.println(scaledValue);
+      delay(10);
+    } else {
+     
+      digitalWrite(10, LOW);
+      digitalWrite(11, LOW);
+      //scaledValue = scaleEMG(receivedValue);
+      //ds3502.setWiper(scaledValue);
+      //Serial.println(scaledValue);
+      delay(10);
+
+
+    }
+  }
+
+
+  wiper_value = analogRead(WIPER_VALUE_PIN);
+  wiper_value *= 5.0;
+  wiper_value /= 1024;
+
+
+  //Serial.print("Wiper Voltage: ");
+  //Serial.print(wiper_value);
+  //Serial.println(" V");
+ 
+
+
+  delay(50);
+}
+
+
+void receive() // Loop that allows communication with python, based on code from xanthium-enterprises
+{
+ 
+  char message = 0;  //The following code is all based on example from xanthium-enterprises
+
+
+  if (Serial.available())
+  {
+    message = Serial.read();  // looks for data to read
+    switch(message)  // messages sent by the code in python
+    {
+      case 'G': Serial.println(scaledValue); // G is for go, the code prints the potentiometer/emg value
+                break;
+               
+      case 'D': Serial.println(wiper_value);  //D is just a random letter, prints the voltage value from digital potentiometer
+                break;
+     
+      case 'S': Serial.println("Good"); // S is for start, it sends a message good, that means the connection is good for the python side
+                break;
+
+
+
+
+
+
+
+
+
+
+
+
+      default:          
+                break;
+   
+    }
+  }
+}
+
+
 
