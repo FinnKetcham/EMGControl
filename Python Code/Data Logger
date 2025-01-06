@@ -1,23 +1,37 @@
-# This Python code works with the Arduino C++ variant to control a linear actuator using a potentiometer
+# This python code works with the Arduino C++ variant to control a linear actuator using a potentiometer
 # The data from the potentiometer is stored on the text file and allows the user to see changes to the actuator motion
 # This project is made with expansion in mind, to later use the stored data to help determine the actuator position
 # Chose to work with pyserial library over pyFirmata libray to control and work with the Arduino
 # Functions around the program based on when they were added, connect together in several ways
-# The program has two sets of input, both from the user, the text-based inputs in the code,
-# and the device input from the user-turned potentiometer
+# The program has two sets of input, both from the user, the text based inputs in the code,
+# and the device input from the user turned potentiometer
 # Two collection types, the list for local storage in each instance of the program
-# and the data.txt file for long-term storage
+# and the data.txt file for long term storage
 # The program is made up of many procedures that work together to prevent errors and allow smooth functioning
-# The list is sequenced and produces each data point in the order it was collected and labels what number point it was
-# The procedures are called at the end with the beginning procedures and the rest are called from the previous
-# There are 4 outputs in the code, the printed list and graphed data at the end, the stored list holding data
-# that can be used, and the movement of the linear actuator.
-# Code to use pyserial based on examples from:
+# The list is sequenced and produces each data point in the order it was collected, and labels what number point it was
+# The procedures are called at the end with the begin procedures and the rest are called from the previous
+# Their are 3 outputs in the code, the printed list at the end, the stored list holding data that can be used,
+# and the movement of the linear actuator.
+# Code to use pyserial based off examples from:
 # https://github.com/xanthium-enterprises/CrossPlatform-Serial-Port-Programming-using-Python-and-PySerial
 # Lines referencing the code will refer to xanthium-enterprises if based on or from the examples
 # Code for opening and adding a text file based on reference from:
 # https://www.w3schools.com/python/python_file_write.asp
 # Lines referencing the code will refer to w3schools if based on or from the examples
+
+
+#################################
+########    UPDATES:  ###########
+#################################
+
+# Added in ability to then graph the data at the end of the function, along with introducing a new variable that is read 
+# based off the voltage values so that any differences between the transcribed data and actual voltage output can be
+# noticed.
+# also collects and stores and now graphs the voltage data, with volts.txt
+# Repurposed is moving to now determine speed, plan to add determination of direction in again at later date based off
+# reading the bytes from the arduinos
+
+
 
 import matplotlib.pyplot as plt
 import serial  # Imports pyserial to be used to read and write to arduino
@@ -28,22 +42,30 @@ global SerialMonitor
 global get_data
 global condensed_data
 global data_line
+global voltage_line
 global is_extension
+global condensed_voltage
+
+
 potentiometer_values = []  # Creates list to store potentiometer values from Arduino
-port = "COMX"  # Replace "X" in "COMX" with whatever port number your Arduino is connected to
+voltage_values = []  # creates list for voltage readings to check voltage output
+port = "COM3"
 port_found = True
-
-
 
 
 def open_save_file():  # Procedure attempts to create a text file, if already there adds start indicator
    global save_data
    try:
        open('data.txt', 'x')  # This line and the next few are based off of w3schools sample code for text files
-
-
    except FileExistsError:
        save_data = open('data.txt', 'a')
+       save_data.write("\nProgram Start")
+       save_data.close()
+   try:
+       open('volts.txt', 'x')
+
+   except FileExistsError:
+       save_data = open('volts.txt', 'a')
        save_data.write("\nProgram Start")
        save_data.close()
 
@@ -71,14 +93,14 @@ def open_port():  # Function attempts to open a port on Arduino
    global SerialMonitor
    global port_found
    global port
-   try:  # Try and execpt loops try opening port 'COMX' and if it fails to find connection, trys 'COMX+1', make X your connected port
-       SerialMonitor = serial.Serial('COMX')  # Based on code from xanthium-enterprises on opening a pyserial port
+   try:  # Try and execpt loops try opening port 'COM3' and if it fails to find connection, trys 'COM4'
+       SerialMonitor = serial.Serial('COM3')  # Based on code from xanthium-enterprises on opening a pyserial port
 
 
    except serial.serialutil.SerialException:
-       port = "COMX+1"
+       port = "COM3"
        try:
-           SerialMonitor = serial.Serial('COMX')  # Based on code from xanthium-enterprises on opening a pyserial port
+           SerialMonitor = serial.Serial('COM4')  # Based on code from xanthium-enterprises on opening a pyserial port
 
 
        except serial.serialutil.SerialException:
@@ -157,10 +179,20 @@ def remove_extra(data_line_fix):  # Function takes message from arduino and trim
 
 def data_grab():  # Function grabs the data, sends message to Arduino, which prints a line of data, which is then read
    global data_line
+   global voltage_line
+   global gcount
    if get_data:
-       SerialMonitor.write(b'G')  # This and next line based on code from xanthium-enterprises
-       data_line = str(SerialMonitor.readline())
-       remove_extra(data_line)
+       if gcount == 0:
+           gcount += 1
+           SerialMonitor.write(b'G')  # This and next line based on code from xanthium-enterprises
+           data_line = str(SerialMonitor.readline())
+           remove_extra(data_line)
+       elif gcount == 1:
+           SerialMonitor.write(b'D')  # This and next line based on code from xanthium-enterprises
+           data_line = str(SerialMonitor.readline())
+           remove_extra(data_line)
+
+
 
 
 
@@ -186,6 +218,8 @@ def collection_type():  # Asks user what method of collection should be used, au
 
 
 def auto_collect():  # Function to automatically collect data, based on info from user
+   global gcount
+   gcount = 0
    loops_in = input("How many data points should be collected\nEnter as Integer: ")
    time_collect_in = input("How often should data points be collected (in seconds)\nEnter as as XX.XX: ")
    try:  # Try loops test the inputs to keep from errors
@@ -203,28 +237,58 @@ def auto_collect():  # Function to automatically collect data, based on info fro
 
 
    for num in range(loop):  # During loop the data is grabbed, and added to the list of values
+
+
+       gcount = 0
        data_grab()
        potentiometer_values.append({'data': condensed_data})
+       print(condensed_data)
+       data_grab()
+       voltage_values.append({'data': condensed_data})
        print(condensed_data)
        time.sleep(time_collect)
    end_again()
 
 
-def add_to_data():  # Function adds the datapoints to the text file to be stored, and prints/graphs them for user to see
+
+
+#def add_to_data():  # Function adds the datapoints to the text file to be stored, and prints them for user to see
+#    datapoint_num = 1
+#
+#    for point in potentiometer_values:
+#        is_moving(point['data'])
+#        add_data = open('data.txt', 'a')  # Adding the data based off code from w3schools, next 3 lines
+#        add_data.write(f'\nDatapoint {datapoint_num}: {point['data']}, Actuator is {is_extension}')
+#        add_data.close()
+#        print(f"Datapoint {datapoint_num}: {point['data']}, Actuator is {is_extension}")  # f strings taught in class
+#
+#        datapoint_num += 1
+#
+
+
+
+
+
+
+def add_to_data():  #graphs out potentiometer values
    datapoint_num = 1
-   data_points = []  # Stores the datapoints to be graphed
+   data_points = []  
 
 
    for point in potentiometer_values:
-       is_moving(point['data'])
-       with open('data.txt', 'a') as add_data:   # Adding the data based off code from w3schools, next 2 lines
+       is_moving(point['data'])  # Assuming this is a function you have already defined
+       with open('data.txt', 'a') as add_data:
            add_data.write(f'\nDatapoint {datapoint_num}: {point['data']}, Actuator is {is_extension}')
-       print(f"Datapoint {datapoint_num}: {point['data']}, Actuator is {is_extension}")   # f strings taught in class
+       print(f"Datapoint {datapoint_num}: {point['data']}, Actuator is {is_extension}")
 
-       data_points.append(float(point['data']))  # Stores the datapoints for plotting
+
+       # Store data for plotting
+       data_points.append(float(point['data']))
+
+
        datapoint_num += 1
 
-# Data plotting function based on google search of how to use the matplot library
+   # plots the data, based on google search of how to plot data
    plt.figure(figsize=(10, 5))
    plt.plot(data_points, label="Potentiometer Data")
    plt.title("Potentiometer Values Over Time")
@@ -234,24 +298,48 @@ def add_to_data():  # Function adds the datapoints to the text file to be stored
    plt.show()
 
 
+def add_to_data2():  # Graphs out Voltage Values
+   datapoint_num = 1  
+   volt_points = []
+
+
+   for point in voltage_values:
+       with open('volts.txt', 'a') as add_data:
+           add_data.write(f'\nDatapoint {datapoint_num}: {point['data']} V')
+       print(f"\nDatapoint {datapoint_num}: {point['data']} V")
+
+
+       # Store data for plotting
+       volt_points.append(float(point['data']))
+
+
+       datapoint_num += 1
+
+   # plots the data, based on google search of how to plot data
+   plt.figure(figsize=(10, 5))
+   plt.plot(volt_points, label="Voltage Data")
+   plt.title("Voltage Values Over Time")
+   plt.xlabel("Datapoint Number")
+   plt.ylabel("Voltage Values")
+   plt.legend()
+   plt.show()
+
+
 
 
 def is_moving(num):  # Lets user know the movement of the linear actuator controlled by the code
    global is_extension
    make_int = int(num)
-   if make_int > 30:
-       is_extension = "Extending"
+   if make_int > 63.5:
+       is_extension = "Higher speed"
        return is_extension
 
 
-   elif make_int < 10:
-       is_extension = "Retracting"
+   elif make_int < 63.5:
+       is_extension = "Lower Speed"
        return is_extension
 
 
-   #else:                         #Used if potentiometer is data logger, emg to sensitive to have actuator try and stop
-   #    is_extension = "Stopped"
-   #    return is_extension
 
 
 
@@ -263,6 +351,10 @@ def end_again():  # Asks user if they wish to end the program, if yes restarts c
    elif again == "n":
        add_to_data()
        add_data = open('data.txt', 'a')  # 3 lines based on w3schools code
+       add_data.write(f'\nProgram End')
+       add_data.close()
+       add_to_data2()
+       add_data = open('volts.txt', 'a')  # 3 lines based on w3schools code
        add_data.write(f'\nProgram End')
        add_data.close()
    else:
@@ -295,6 +387,10 @@ def begin():  # Function runs start code, and prevents breaking, failing at a po
    else:
        pass
 
+
+
+
+begin()
 
 
 
