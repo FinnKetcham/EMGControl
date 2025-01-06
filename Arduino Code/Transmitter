@@ -1,1 +1,55 @@
+#include <AltSoftSerial.h>
 
+AltSoftSerial EMGSERIAL;  //Sets up the alternate serial monitor so that data can be transmitted
+
+int emg = A0;  //sets emg to be the digital pin to read
+
+int p1 = 2;   //defines the pins of the switch     
+int p2 = 3;        
+
+void setup() {
+   
+  pinMode(emg, INPUT);    // Sets up the emg pin to read the values from the MYOWARE EMG
+  pinMode(p1, INPUT_PULLUP); // Sets up the switch pins
+  pinMode(p2, INPUT_PULLUP);
+
+
+  Serial.begin(9600);     
+  EMGSERIAL.begin(9600);  //Starts the normal serial and the second serial monitor to transmit data
+
+}
+
+void loop() {
+  
+  bool up = digitalRead(p1) == LOW;  //makes the reading of the switch booleans
+  bool down = digitalRead(p2) == LOW;
+  int emgread = analogRead(emg);  //reads emg
+  int mappedemg = map(emgread, 0, 1023, 0, 253); //Maps the values of the potentiometer to the bytes being sent for emg value
+ 
+  //Serial.println(emgread);
+  //Serial.println(mappedemg);
+
+  delay(10);  
+
+  if (up) {  //makes it so that when the switch is up it sends the byte value of 255
+    EMGSERIAL.write(255);  //not used otherwise it allows the reciver to know when to extend
+    Serial.println(255);
+    delay(10);
+    EMGSERIAL.write(mappedemg);  // also writes the emg value so that with how the reciver works it takes speed and direction
+  }
+  else if (down) {  // Same thing as previous function but using the byte 254, and to go down
+    EMGSERIAL.write(254);  
+    Serial.println(254);
+    delay(10);
+
+    EMGSERIAL.write(mappedemg);  
+  }
+  else {
+    EMGSERIAL.write(mappedemg); //makes it so it sends the mapped value so that muslce flextion and voltage can still be checked
+    //delay(10);
+    
+    Serial.println(mappedemg);
+  }
+
+  delay(10);  
+}
